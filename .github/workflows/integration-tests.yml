@@ -1,0 +1,76 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: root
+          POSTGRES_DB: allo_dakar
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 && break || sleep 1
+          done
+
+      - name: Install backend dependencies
+        working-directory: ALLO_DAKAR-backend
+        run: npm ci
+
+      - name: Push Prisma schema to Postgres
+        working-directory: ALLO_DAKAR-backend
+        env:
+          DATABASE_URL: postgresql://postgres:root@localhost:5432/allo_dakar
+        run: npx prisma db push --accept-data-loss || npx prisma db push
+
+      - name: Start backend (dev) with test routes enabled
+        working-directory: ALLO_DAKAR-backend
+        env:
+          DATABASE_URL: postgresql://postgres:root@localhost:5432/allo_dakar
+          JWT_SECRET: ci_test_secret
+          ENABLE_TEST_ROUTES: '1'
+          TEST_SECRET: ci_test_secret
+          PORT: 4001
+        run: |
+          npm run dev &
+          # give the server a short moment to start
+          sleep 3
+
+      - name: Wait for backend /health
+        run: |
+          for i in {1..30}; do
+            curl -sS http://localhost:4001/health && break || sleep 1
+          done
+
+      - name: Run integration tests
+        working-directory: ALLO_DAKAR-main
+        env:
+          DATABASE_URL: postgresql://postgres:root@localhost:5432/allo_dakar
+          JWT_SECRET: ci_test_secret
+          TEST_SECRET: ci_test_secret
+        run: |
+          npm ci
+          npm test -- __tests__/integration.backend.test.ts

@@ -76,6 +76,15 @@ router.post('/register', async (req: Request, res: Response) => {
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: error.errors });
         }
+        // handle Prisma unique constraint errors with a useful message
+        if (error && error.code === 'P2002' && error.meta && error.meta.target) {
+            const fields = Array.isArray(error.meta.target) ? error.meta.target.join(', ') : String(error.meta.target);
+            console.error('Registration unique constraint failed:', fields, error);
+            return res.status(400).json({ error: `Duplicate value for field(s): ${fields}` });
+        }
+
+        // log unexpected errors to help debugging in development
+        console.error('Registration error:', error);
         res.status(500).json({ error: 'Registration failed' });
     }
 });

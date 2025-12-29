@@ -9,6 +9,7 @@ import userRoutes from './routes/user.routes';
 import bookingRoutes from './routes/booking.routes';
 import walletRoutes from './routes/wallet.routes';
 import ratingRoutes from './routes/rating.routes';
+import testRoutes from './routes/test.routes';
 
 dotenv.config();
 
@@ -32,6 +33,10 @@ app.use('/api/users', userRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/ratings', ratingRoutes);
+// Mount test-only routes when enabled
+if (process.env.ENABLE_TEST_ROUTES === '1') {
+    app.use('/api/test', testRoutes);
+}
 
 // Error handling middleware
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
